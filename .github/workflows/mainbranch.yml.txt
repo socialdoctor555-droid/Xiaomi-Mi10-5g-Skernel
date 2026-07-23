@@ -1,0 +1,56 @@
+name: APT-n0kernel(staging-umi)
+
+on:
+  workflow_dispatch:
+ 
+jobs:
+  build:
+    name: Build Kernel for Xiaomi Mi10 UMI
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Cleanup Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+
+    - name: Setup Cache (ccache)
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ccache_mikernel
+        key: kernel-ccache-umi-build-miui.sh-${{ github.run_id }}
+        restore-keys: |
+          kernel-ccache-umi-build-miui.sh-
+          kernel-ccache-umi-
+          kernel-ccache-
+
+    - name: Setup Toolchain (Neutron Clang 18)
+      run: |
+         mkdir -p $HOME/zyc-clang
+         cd $HOME/zyc-clang
+         wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/05012024/neutron-clang-05012024.tar.zst
+         tar --zstd -xvf neutron-clang-05012024.tar.zst
+         
+    - name: Build Kernel
+      run: |
+        chmod +x build-miui.sh
+        echo "Using build-miui.sh....."
+        bash build-miui.sh
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: Skernelv1
+        path: ./*.zip
+        if-no-files-found: error
