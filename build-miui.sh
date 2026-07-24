@@ -120,6 +120,8 @@ done
 
 echo "Integrating KernelSU (EmanuelCN)..."
 
+git clone --depth=1 https://github.com/EmanuelCN/KernelSU.git KernelSU
+
 echo "..........KernelSu setup done............."
 
 make $MAKE_ARGS ${DEFCONFIG}
@@ -132,6 +134,14 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_SYSVIPC \
     --enable CONFIG_IPC_NS \
     --enable CONFIG_DEVTMPFS
+
+echo "......Applying KernelSU configs......."
+./scripts/config --file out/.config \
+    --enable CONFIG_KSU \
+    --enable CONFIG_KPROBES \
+    --enable CONFIG_KALLSYMS \
+    --enable CONFIG_KALLSYMS_ALL \
+    --enable CONFIG_OVERLAY_FS
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
