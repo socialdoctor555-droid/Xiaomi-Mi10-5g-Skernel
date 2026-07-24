@@ -124,8 +124,6 @@ git clone --depth=1 \
     https://github.com/EmanuelCN/KernelSU.git \
     KernelSU
 
-bash KernelSU/kernel/setup.sh
-
 echo "..........KernelSu setup done............."
 
 make $MAKE_ARGS ${DEFCONFIG}
