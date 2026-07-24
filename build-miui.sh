@@ -144,7 +144,8 @@ echo "......Applying KernelSU configs......."
     --enable CONFIG_KSU \
     --enable CONFIG_KPROBES \
     --enable CONFIG_KALLSYMS \
-    --enable CONFIG_KALLSYMS_ALL
+    --enable CONFIG_KALLSYMS_ALL \
+    --enable CONFIG_OVERLAY_FS
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
