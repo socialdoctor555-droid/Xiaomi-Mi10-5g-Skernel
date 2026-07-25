@@ -153,6 +153,44 @@ unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
 
 echo "========== ReSukiSU integration completed =========="
 
+echo "========== Integrating SUSFS =========="
+
+SUSFS_BRANCH="kernel-4.19"
+SUSFS_DIR="/tmp/susfs4ksu"
+
+echo "-- Cloning susfs4ksu ($SUSFS_BRANCH)..."
+rm -rf "$SUSFS_DIR"
+git clone -b "$SUSFS_BRANCH" --single-branch --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR"
+
+echo "-- Copying susfs core files into kernel tree..."
+cp "$SUSFS_DIR/kernel_patches/fs/susfs.c" fs/
+mkdir -p include/linux
+cp "$SUSFS_DIR/kernel_patches/include/linux/susfs.h" include/linux/
+cp "$SUSFS_DIR/kernel_patches/include/linux/susfs_def.h" include/linux/ 2>/dev/null || true
+
+echo "-- Applying kernel-side susfs patch (conflicts against our manual hooks are possible)..."
+cp "$SUSFS_DIR/kernel_patches/50_add_susfs_in_kernel-4.19.patch" ./susfs_kernel.patch
+patch -p1 -N --forward < susfs_kernel.patch || {
+    echo "Note: some hunks may have failed against fs/stat.c, fs/exec.c, fs/open.c"
+    echo "      (they were already hand-modified for ReSukiSU manual hooks)."
+    echo "      Check for *.rej files below:"
+    find . -name "*.rej"
+}
+
+echo "-- Locating ReSukiSU's KernelSU-equivalent dir..."
+KSU_DIR=$(find . -maxdepth 2 -iname "KernelSU" -type d | head -1)
+if [ -n "$KSU_DIR" ] && [ -f "$SUSFS_DIR/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
+    echo "-- Found KSU_DIR: $KSU_DIR"
+    cp "$SUSFS_DIR/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" "$KSU_DIR/"
+    (cd "$KSU_DIR" && patch -p1 -N --forward < 10_enable_susfs_for_ksu.patch) || \
+        echo "Note: may already be handled by ReSukiSU core, or needs manual merge."
+else
+    echo "WARNING: could not auto-locate the KernelSU source dir — see below."
+fi
+
+echo "========== SUSFS integration completed =========="
+
+
 make $MAKE_ARGS ${DEFCONFIG}
 
 echo "..............Applying Droidspaces required kernel configs......."
@@ -166,6 +204,7 @@ echo "..............Applying Droidspaces required kernel configs......."
 
 ./scripts/config --file out/.config \
     --enable CONFIG_KSU \
+    --enable CONFIG_KSU_SUSFS \
     --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
     --disable CONFIG_KPM \
