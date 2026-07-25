@@ -122,7 +122,6 @@ echo "========== Integrating ReSukiSU =========="
 
 KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
 KSU_SETUP_BRANCH="main"
-KSU_HOOK_URI="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
 
 echo "-- Running ReSukiSU setup..."
 curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
@@ -130,11 +129,8 @@ curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
     exit 1
 }
 
-echo "-- Applying inline hook patches..."
-curl -LSs --fail --retry 3 "$KSU_HOOK_URI" | bash || {
-    echo "Inline hook patch failed!"
-    exit 1
-}
+echo "-- DEBUG: locating init_rc_hook symbol --"
+grep -rln "ksu_is_init_rc_hook_enabled\|ksu_init_rc_hook" . --include=*.h --include=*.c || echo "not found anywhere"
 
 echo "-- Exporting required SELinux symbols..."
 
