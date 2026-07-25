@@ -105,9 +105,7 @@ cp -a ${dts_source} .dts.bak
 
 echo "Downloading Droidspaces non-GKI kernel patches......."
 mkdir -p /tmp/droidspaces-patches
-curl -fsSL -o /tmp/droidspaces-patches/01.fix_kernel_panic_in_xt_qtaguid.patch \
-    "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/01.fix_kernel_panic_in_xt_qtaguid.patch"
-curl -fsSL -o "/tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch" \
+curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
     "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
 
 echo "Applying Droidspaces non-GKI kernel patches......."
@@ -215,23 +213,9 @@ echo "..............Applying Droidspaces required kernel configs......."
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
 
-echo "========== ReSukiSU Verification =========="
-
-grep CONFIG_KSU out/.config || true
-grep CONFIG_KSU_MANUAL_HOOK out/.config || true
-
-grep CONFIG_KALLSYMS out/.config || true
-grep CONFIG_KALLSYMS_ALL out/.config || true
-
-grep "sel_handle_status_ops" security/selinux/selinuxfs.c || true
-grep -R "ksu_handle_sys_reboot" kernel || true
-grep -R "ksu_handle_execve" fs || true
-
-echo "==========================================="
-
 echo "Compile is beginning..."
-
 echo "Compile is beginning at the core......."
+
 make $MAKE_ARGS -j"$(nproc)"
 
 if [ -f "out/arch/arm64/boot/Image" ]; then
