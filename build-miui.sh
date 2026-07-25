@@ -145,6 +145,26 @@ echo ".......... Integration of Ksu configs to def........"
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
 
+echo "===== KernelSU files ====="
+find KernelSU-Next -maxdepth 2 -type f | sort
+echo "=========================="
+
+echo "===== drivers/kernelsu ====="
+find drivers/kernelsu -maxdepth 2 -type f | sort || true
+echo "============================"
+
+echo "===== KernelSU Kconfig ====="
+cat drivers/kernelsu/Kconfig || true
+
+echo "===== KernelSU Kbuild ====="
+cat drivers/kernelsu/Kbuild || true
+
+echo "===== Final .config ====="
+grep -E "^CONFIG_KSU|^CONFIG_KPROBES|^CONFIG_KPROBE|^CONFIG_KALLSYMS|^CONFIG_OVERLAY_FS" out/.config || true
+echo "=========================="
+
+echo "Compile is beginning..."
+
 echo "Compile is beginning at the core......."
 make $MAKE_ARGS -j"$(nproc)"
 
