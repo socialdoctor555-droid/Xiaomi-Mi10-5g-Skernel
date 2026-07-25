@@ -175,19 +175,7 @@ patch -p1 -N --forward < susfs_kernel.patch || {
     find . -name "*.rej"
 }
 
-echo "-- Locating ReSukiSU's KernelSU-equivalent dir..."
-KSU_DIR=$(find . -maxdepth 2 -iname "KernelSU" -type d | head -1)
-if [ -n "$KSU_DIR" ] && [ -f "$SUSFS_DIR/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
-    echo "-- Found KSU_DIR: $KSU_DIR"
-    cp "$SUSFS_DIR/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" "$KSU_DIR/"
-    (cd "$KSU_DIR" && patch -p1 -N --forward < 10_enable_susfs_for_ksu.patch) || \
-        echo "Note: may already be handled by ReSukiSU core, or needs manual merge."
-else
-    echo "WARNING: could not auto-locate the KernelSU source dir — see below."
-fi
-
 echo "========== SUSFS integration completed =========="
-
 
 make $MAKE_ARGS ${DEFCONFIG}
 
