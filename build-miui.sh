@@ -197,6 +197,10 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_THREAD_INFO_IN_TASK \
     --enable CONFIG_KALLSYMS \
     --enable CONFIG_KALLSYMS_ALL
+    --enable CONFIG_KSU_SUSFS
+    --enable CONFIG_SUSFS
+    --enable CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT
+    --enable CONFIG_KSU_SUSFS_SUS_PATH
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
