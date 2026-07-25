@@ -118,11 +118,25 @@ for patch_file in /tmp/droidspaces-patches/*.patch; do
     fi
 done
 
-echo "Integrating KernelSU Next (Latest Release)..."
+echo "========== Integrating ReSukiSU =========="
 
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
+KSU_SETUP_BRANCH="main"
+KSU_HOOK_URI="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
 
-echo "..........KernelSU Next setup done............."
+echo "-- Running ReSukiSU setup..."
+curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
+    echo "ReSukiSU setup failed!"
+    exit 1
+}
+
+echo "-- Applying inline hook patches..."
+curl -LSs --fail --retry 3 "$KSU_HOOK_URI" | bash || {
+    echo "Inline hook patch failed!"
+    exit 1
+}
+
+echo "========== ReSukiSU integration completed =========="
 
 make $MAKE_ARGS ${DEFCONFIG}
 
@@ -135,33 +149,27 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_IPC_NS \
     --enable CONFIG_DEVTMPFS
 
-echo ".......... Integration of Ksu configs to def........"
+echo "..........Applying ReSukiSU configs........"
 ./scripts/config --file out/.config \
-    --enable CONFIG_KPROBES \
-    --enable CONFIG_KPROBE_EVENTS \
-    --enable CONFIG_KSU_KPROBE_HOOKS \
-    --enable CONFIG_KSU
+    --enable CONFIG_KSU \
+    --enable CONFIG_KSU_MANUAL_HOOK \
+    --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
+    --disable CONFIG_KPM \
+    --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
+    --enable CONFIG_THREAD_INFO_IN_TASK
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
 
-echo "===== KernelSU files ====="
-find KernelSU-Next -maxdepth 2 -type f | sort
-echo "=========================="
+echo "========== ReSukiSU Verification =========="
 
-echo "===== drivers/kernelsu ====="
-find drivers/kernelsu -maxdepth 2 -type f | sort || true
-echo "============================"
+grep CONFIG_KSU out/.config || true
+grep CONFIG_KSU_MANUAL_HOOK out/.config || true
 
-echo "===== KernelSU Kconfig ====="
-cat drivers/kernelsu/Kconfig || true
+grep -R "ksu_handle_sys_reboot" kernel || true
+grep -R "ksu_handle_execve" fs || true
 
-echo "===== KernelSU Kbuild ====="
-cat drivers/kernelsu/Kbuild || true
-
-echo "===== Final .config ====="
-grep -E "^CONFIG_KSU|^CONFIG_KPROBES|^CONFIG_KPROBE|^CONFIG_KALLSYMS|^CONFIG_OVERLAY_FS" out/.config || true
-echo "=========================="
+echo "==========================================="
 
 echo "Compile is beginning..."
 
