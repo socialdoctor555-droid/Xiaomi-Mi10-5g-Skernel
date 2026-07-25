@@ -120,7 +120,7 @@ done
 
 echo "Integrating KernelSU Next (Latest Release)..."
 
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
 echo "..........KernelSU Next setup done............."
 
@@ -134,6 +134,13 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_SYSVIPC \
     --enable CONFIG_IPC_NS \
     --enable CONFIG_DEVTMPFS
+
+echo ".......... Integration of Ksu configs to def........"
+./scripts/config --file out/.config \
+    --enable CONFIG_KPROBES \
+    --enable CONFIG_KPROBE_EVENTS \
+    --enable CONFIG_KSU_KPROBE_HOOKS \
+    --enable CONFIG_KSU
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
