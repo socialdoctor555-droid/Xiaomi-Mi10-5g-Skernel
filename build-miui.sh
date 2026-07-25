@@ -136,6 +136,26 @@ curl -LSs --fail --retry 3 "$KSU_HOOK_URI" | bash || {
     exit 1
 }
 
+echo "-- Exporting required SELinux symbols..."
+
+unstatic() {
+    local file="$1"
+    local regex="$2"
+
+    if [ -f "$file" ] && grep -q "static $regex" "$file" 2>/dev/null; then
+        sed -i "s/static $regex/$regex/" "$file"
+        echo "  -> Exported: $regex"
+    fi
+}
+
+unstatic "security/selinux/selinuxfs.c" "ssize_t (\*write_op\[\])"
+unstatic "security/selinux/selinuxfs.c" "const struct file_operations sel_handle_status_ops"
+unstatic "security/selinux/selinuxfs.c" "DEFINE_MUTEX(sel_mutex);"
+unstatic "security/selinux/ss/services.c" "struct page \*selinux_status_page;"
+unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
+unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
+unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
+
 echo "========== ReSukiSU integration completed =========="
 
 make $MAKE_ARGS ${DEFCONFIG}
@@ -149,14 +169,15 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_IPC_NS \
     --enable CONFIG_DEVTMPFS
 
-echo "..........Applying ReSukiSU configs........"
 ./scripts/config --file out/.config \
     --enable CONFIG_KSU \
     --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
     --disable CONFIG_KPM \
     --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-    --enable CONFIG_THREAD_INFO_IN_TASK
+    --enable CONFIG_THREAD_INFO_IN_TASK \
+    --enable CONFIG_KALLSYMS \
+    --enable CONFIG_KALLSYMS_ALL
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
@@ -166,6 +187,10 @@ echo "========== ReSukiSU Verification =========="
 grep CONFIG_KSU out/.config || true
 grep CONFIG_KSU_MANUAL_HOOK out/.config || true
 
+grep CONFIG_KALLSYMS out/.config || true
+grep CONFIG_KALLSYMS_ALL out/.config || true
+
+grep "sel_handle_status_ops" security/selinux/selinuxfs.c || true
 grep -R "ksu_handle_sys_reboot" kernel || true
 grep -R "ksu_handle_execve" fs || true
 
