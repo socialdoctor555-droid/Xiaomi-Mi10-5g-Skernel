@@ -204,7 +204,6 @@ echo "..............Applying Droidspaces required kernel configs......."
 
 ./scripts/config --file out/.config \
     --enable CONFIG_KSU \
-    --enable CONFIG_KSU_SUSFS \
     --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
     --disable CONFIG_KPM \
