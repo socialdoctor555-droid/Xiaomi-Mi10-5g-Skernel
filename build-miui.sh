@@ -188,19 +188,27 @@ echo "..............Applying Droidspaces required kernel configs......."
     --enable CONFIG_IPC_NS \
     --enable CONFIG_DEVTMPFS
 
+echo "........Resukisu Integration..........."
 ./scripts/config --file out/.config \
     --enable CONFIG_KSU \
-    --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-    --disable CONFIG_KPM \
+    --enable CONFIG_KPM \
+    --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-    --enable CONFIG_THREAD_INFO_IN_TASK \
-    --enable CONFIG_KALLSYMS \
-    --enable CONFIG_KALLSYMS_ALL
-    --enable CONFIG_KSU_SUSFS
-    --enable CONFIG_SUSFS
-    --enable CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT
-    --enable CONFIG_KSU_SUSFS_SUS_PATH
+    --enable CONFIG_THREAD_INFO_IN_TASK
+
+echo "============= .....Applying Susfs Integration.... =============="
+./scripts/config --file out/.config \
+    --enable CONFIG_KSU_SUSFS_SUS_PATH \
+    --enable CONFIG_KSU_SUSFS_SUS_MOUNT \
+    --enable CONFIG_KSU_SUSFS_SUS_KSTAT \
+    --enable CONFIG_KSU_SUSFS_SPOOF_UNAME \
+    --enable CONFIG_KSU_SUSFS_ENABLE_LOG \
+    --enable CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    --enable CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+    --enable CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+    --enable CONFIG_KSU_SUSFS_SUS_MAP \
+    --enable CONFIG_KSU_SUSFS_TRY_UMOUNT \
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
