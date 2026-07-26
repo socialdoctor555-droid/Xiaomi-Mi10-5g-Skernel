@@ -1,4 +1,4 @@
-name: Resukisu_susfs_v2(test)
+name: Pre-final Resukisu_susfs_v2(test)
 on:
   workflow_dispatch:
 jobs:
