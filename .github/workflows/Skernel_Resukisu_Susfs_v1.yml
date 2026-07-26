@@ -111,49 +111,6 @@ jobs:
          echo "CONFIG_REKERNEL=y" >> "$MAIN_DEFCONFIG"
          echo "-- rekernel config appended to $MAIN_DEFCONFIG --"
 
-    - name: SUSFS Integration
-      run: |
-         DEFCONFIG="vendor/umi_defconfig"
-         MAIN_DEFCONFIG="arch/arm64/configs/${DEFCONFIG}"
-
-         echo "-- ReSukiSU ships SUSFS support built-in; no external susfs4ksu patch needed --"
-         echo "-- Target defconfig: [$MAIN_DEFCONFIG] --"
-
-         echo "-- Locating KernelSU driver directory --"
-         if [ -d "KernelSU" ]; then
-           KSU_DIR="KernelSU"
-         else
-           echo "-- Fatal: Could not locate the KernelSU driver directory (expected ./KernelSU)."
-           exit 1
-         fi
-
-         echo "-- Available SUSFS Kconfig options in this ReSukiSU build: --"
-         grep -rho "config KSU_SUSFS[A-Z_]*" "$KSU_DIR" 2>/dev/null | sort -u || echo "(none found - check KSU_DIR path)"
-
-         echo "..............Applying SUSFS kernel configs......."
-         {
-           echo "CONFIG_KSU_SUSFS=y"
-           echo "CONFIG_KSU_SUSFS_SUS_PATH=y"
-           echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y"
-           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y"
-           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y"
-           echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y"
-           echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y"
-           echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y"
-           echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
-           echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y"
-           echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
-           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
-           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
-           # Manual (non-kprobe) hook is already integrated -> sus_su MUST stay disabled
-           echo "CONFIG_KSU_SUSFS_SUS_SU=n"
-         } >> "$MAIN_DEFCONFIG"
-
-         echo "-- susfs config appended to $MAIN_DEFCONFIG --"
-         echo "-- NOTE: unknown/unsupported CONFIG_KSU_SUSFS_* keys are silently ignored by the kernel build,"
-         echo "   they will just not appear in the generated .config. Compare the grep output above against"
-         echo "   the list appended here if a feature doesn't show up after 'make olddefconfig'."
-
     - name: Config Preparation
       run: |
          # NOTE: these defaults must match the ones in build-miui.sh.
@@ -217,12 +174,8 @@ jobs:
          echo "........Resukisu Integration..........."
          ./scripts/config --file out/.config \
          --enable CONFIG_KSU \
-         --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-         --enable CONFIG_KPM \
-         --enable CONFIG_KSU_MANUAL_HOOK \
-         --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-         --enable CONFIG_THREAD_INFO_IN_TASK
-
+         --enable CONFIG_KSU_MANUAL_HOOK 
+         
          echo "Resolving config dependencies......."
          make $MAKE_ARGS olddefconfig
 
