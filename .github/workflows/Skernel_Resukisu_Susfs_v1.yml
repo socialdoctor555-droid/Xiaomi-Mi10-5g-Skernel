@@ -221,7 +221,8 @@ jobs:
          --enable CONFIG_KPM \
          --enable CONFIG_KSU_MANUAL_HOOK \
          --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-         --enable CONFIG_THREAD_INFO_IN_TASK
+         --enable CONFIG_THREAD_INFO_IN_TASK \
+         --enable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK
 
          echo "Resolving config dependencies......."
          make $MAKE_ARGS olddefconfig
