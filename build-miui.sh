@@ -31,112 +31,11 @@ if ! command -v clang >/dev/null 2>&1; then
     exit 1
 fi
 
-
-# Enable ccache for speed up compiling 
-export CCACHE_DIR="$HOME/.cache/ccache_mikernel" 
-export CC="clang"
-export CXX="clang++"
-export PATH="/usr/lib/ccache:$PATH"
-export CCACHE_COMPILERCHECK=content
-export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
-echo "CCACHE_DIR: [$CCACHE_DIR]"
-
-
-MAKE_ARGS="ARCH=arm64 \
-           SUBARCH=arm64 \
-           O=out \
-           CC=clang \
-           HOSTCC=clang \
-           CLANG_TRIPLE=aarch64-linux-gnu- \
-           CROSS_COMPILE=aarch64-linux-gnu- \
-           CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-           CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-           LD=ld.lld \
-           AR=llvm-ar \
-           NM=llvm-nm \
-           OBJCOPY=llvm-objcopy \
-           OBJDUMP=llvm-objdump \
-           STRIP=llvm-strip"
-
-
-if [ "$1" == "j1" ]; then
-    make $MAKE_ARGS -j1
-    exit
-fi
-
-if [ "$1" == "continue" ]; then
-    make $MAKE_ARGS -j$(nproc)
-    exit
-fi
-
-DEFCONFIG="vendor/umi_defconfig"
-
-if [ ! -f "arch/arm64/configs/${DEFCONFIG}" ]; then
-    echo "No target device [${TARGET_DEVICE}] found."
-    echo "Missing: arch/arm64/configs/${DEFCONFIG}"
-    echo "Available defconfigs:"
-    ls arch/arm64/configs/vendor/*_defconfig
-    exit 1
-fi
-
 # Check clang is existing.
 echo "[clang --version]:"
 clang --version
 
-echo ".........TARGET_DEVICE: Xiaomi Mi 10 5g UMI......"
-
-echo "Applying Droidspaces non-GKI kernel patches......."
-for patch_file in /tmp/droidspaces-patches/*.patch; do
-    echo "  -> Applying: $(basename "$patch_file")"
-    if ! patch -p1 -N --forward < "$patch_file"; then
-        echo "     Note: patch may already be applied or failed to apply cleanly - check manually if the build breaks."
-    fi
-done
-
-# Exporting Selinux 
-
-echo "-- Exporting required SELinux symbols..."
-unstatic() {
-    local file="$1"
-    local regex="$2"
-
-    if [ -f "$file" ] && grep -q "static $regex" "$file" 2>/dev/null; then
-        sed -i "s/static $regex/$regex/" "$file"
-        echo "  -> Exported: $regex"
-    fi
-}
-unstatic "security/selinux/selinuxfs.c" "const struct file_operations sel_handle_status_ops"
-unstatic "security/selinux/selinuxfs.c" "DEFINE_MUTEX(sel_mutex);"
-unstatic "security/selinux/ss/services.c" "struct page \*selinux_status_page;"
-unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
-unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
-unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
-
-make $MAKE_ARGS ${DEFCONFIG}
-
-echo "..............Applying Droidspaces required kernel configs......."
-./scripts/config --file out/.config \
-    --enable CONFIG_NAMESPACES \
-    --enable CONFIG_PID_NS \
-    --enable CONFIG_UTS_NS \
-    --enable CONFIG_SYSVIPC \
-    --enable CONFIG_IPC_NS \
-    --enable CONFIG_DEVTMPFS
-
-echo "........Resukisu Integration..........."
-./scripts/config --file out/.config \
-    --enable CONFIG_KSU \
-    --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-    --enable CONFIG_KPM \
-    --enable CONFIG_KSU_MANUAL_HOOK \
-    --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-    --enable CONFIG_THREAD_INFO_IN_TASK
-
-echo "Resolving config dependencies......."
-make $MAKE_ARGS olddefconfig
-
 echo "Compile is beginning..."
-echo "Compile is beginning at the core......."
 
 make $MAKE_ARGS -j"$(nproc)"
 
@@ -149,7 +48,6 @@ fi
 
 echo "Generating [out/arch/arm64/boot/dtb]......"
 find out/arch/arm64/boot/dts -name '*.dtb' -exec cat {} + >out/arch/arm64/boot/dtb
-
 
 # Restore modified dts
 rm -rf ${dts_source}
@@ -168,16 +66,9 @@ echo "Build for MIUI finished."
 
 # ------------- End of Building for MIUI -------------
 #  If you don't need MIUI you can comment out the above block [Building for MIUI]
-
-
 cd anykernel 
-
 ZIP_FILENAME=Skernelv1.zip
-
 zip -r9 $ZIP_FILENAME ./* -x .git .gitignore out/ ./*.zip
-
 mv $ZIP_FILENAME ../
-
 cd ..
-
 echo "Done. The flashable zip is: [./$ZIP_FILENAME]"
