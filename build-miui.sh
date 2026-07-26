@@ -84,29 +84,9 @@ echo "[clang --version]:"
 clang --version
 
 echo ".........TARGET_DEVICE: Xiaomi Mi 10 5g UMI......"
-
 echo "Cleaning..."
 
 rm -rf out/
-
-echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
-git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
-
-# ------------- Building for MIUI -------------
-
-
-echo "Building for MIUI....."
-
-dts_source=arch/arm64/boot/dts/vendor/qcom
-
-# Backup dts
-cp -a ${dts_source} .dts.bak
-
-echo "Downloading Droidspaces non-GKI kernel patches......."
-
-mkdir -p /tmp/droidspaces-patches
-curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
-    "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
 
 echo "Applying Droidspaces non-GKI kernel patches......."
 for patch_file in /tmp/droidspaces-patches/*.patch; do
@@ -116,22 +96,9 @@ for patch_file in /tmp/droidspaces-patches/*.patch; do
     fi
 done
 
-echo "========== Integrating ReSukiSU =========="
-
-KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
-KSU_SETUP_BRANCH="main"
-
-echo "-- Running ReSukiSU setup..."
-curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
-    echo "ReSukiSU setup failed!"
-    exit 1
-}
-
-echo "-- DEBUG: locating init_rc_hook symbol --"
-grep -rln "ksu_is_init_rc_hook_enabled\|ksu_init_rc_hook" . --include=*.h --include=*.c || echo "not found anywhere"
+# Exporting Selinux 
 
 echo "-- Exporting required SELinux symbols..."
-
 unstatic() {
     local file="$1"
     local regex="$2"
@@ -141,7 +108,6 @@ unstatic() {
         echo "  -> Exported: $regex"
     fi
 }
-
 unstatic "security/selinux/selinuxfs.c" "const struct file_operations sel_handle_status_ops"
 unstatic "security/selinux/selinuxfs.c" "DEFINE_MUTEX(sel_mutex);"
 unstatic "security/selinux/ss/services.c" "struct page \*selinux_status_page;"
@@ -149,22 +115,7 @@ unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
 unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
 unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
 
-echo "========== ReSukiSU integration completed =========="
-
-echo "========== Integrating SUSFS =========="
-
-SUSFS_BRANCH="kernel-4.19"
-SUSFS_DIR="/tmp/susfs4ksu"
-
-echo "-- Cloning susfs4ksu ($SUSFS_BRANCH)..."
-rm -rf "$SUSFS_DIR"
-git clone -b "$SUSFS_BRANCH" --single-branch --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR"
-
-echo "-- Copying susfs core files into kernel tree..."
-cp "$SUSFS_DIR/kernel_patches/fs/susfs.c" fs/
-mkdir -p include/linux
-cp "$SUSFS_DIR/kernel_patches/include/linux/susfs.h" include/linux/
-cp "$SUSFS_DIR/kernel_patches/include/linux/susfs_def.h" include/linux/ 2>/dev/null || true
+#echo "========== Integrating SUSFS =========="
 
 echo "-- Applying kernel-side susfs patch (conflicts against our manual hooks are possible)..."
 cp "$SUSFS_DIR/kernel_patches/50_add_susfs_in_kernel-4.19.patch" ./susfs_kernel.patch
