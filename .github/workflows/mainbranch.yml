@@ -44,6 +44,19 @@ jobs:
 
     - name: Cloning the necessary resources
       run: |
+
+          echo "========== Integrating ReSukiSU =========="
+          KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
+          KSU_SETUP_BRANCH="main"
+          echo "-- Running ReSukiSU setup..."
+          curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
+          echo "ReSukiSU setup failed!"
+          exit 1
+          }
+
+          echo "-- DEBUG: locating init_rc_hook symbol --"
+          grep -rln "ksu_is_init_rc_hook_enabled\|ksu_init_rc_hook" . --include=*.h --include=*.c || echo "not found anywhere"
+
           echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
           git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
           echo ".......Anykernel sources cloned....."
@@ -59,13 +72,16 @@ jobs:
           echo "-- Cloning susfs4ksu ($SUSFS_BRANCH)..."
           rm -rf "$SUSFS_DIR"
           git clone -b "$SUSFS_BRANCH" --single-branch --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR"
- 
           echo "-- Copying susfs core files into kernel tree..."
           cp "$SUSFS_DIR/kernel_patches/fs/susfs.c" fs/
           mkdir -p include/linux
           cp "$SUSFS_DIR/kernel_patches/include/linux/susfs.h" include/linux/
           cp "$SUSFS_DIR/kernel_patches/include/linux/susfs_def.h" include/linux/ 2>/dev/null || true
- 
+
+          echo "Building for MIUI Display configuration....."
+          dts_source=arch/arm64/boot/dts/vendor/qcom
+          cp -a ${dts_source} .dts.bak
+
     - name: Build Kernel
       run: |
         chmod +x build-miui.sh
