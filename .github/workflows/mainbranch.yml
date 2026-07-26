@@ -84,7 +84,7 @@ jobs:
          export CCACHE_COMPILERCHECK=content
          export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
          echo "CCACHE_DIR: [$CCACHE_DIR]"
-
+         
          MAKE_ARGS="ARCH=arm64 \
            SUBARCH=arm64 \
            O=out \
@@ -104,9 +104,8 @@ jobs:
          echo "......Setting up the compiling process......."
          make $MAKE_ARGS -j1
          make $MAKE_ARGS -j$(nproc)
-         echo ".......Defconfig Logication......"
-         DEFCONFIG="vendor/umi_defconfing
-
+         DEFCONFIG="vendor/umi_defconfig"
+        
     - name: Finalizing for Compiling process
       run: |
          echo "Applying Droidspaces non-GKI kernel patches......."
