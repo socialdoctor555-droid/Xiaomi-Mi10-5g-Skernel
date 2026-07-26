@@ -3,38 +3,6 @@
 # Ensure the script exits on error
 set -e
 
-TOOLCHAIN_PATH=$HOME/neutron-clang/bin
-GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD)
-TARGET_DEVICE=umi
-
-if [ ! -d $TOOLCHAIN_PATH ]; then
-    echo "TOOLCHAIN_PATH [$TOOLCHAIN_PATH] does not exist."
-    echo "Please ensure the toolchain is there, or change TOOLCHAIN_PATH in the script to your toolchain path."
-    exit 1
-fi
-
-echo "TOOLCHAIN_PATH: [$TOOLCHAIN_PATH]"
-export PATH="$TOOLCHAIN_PATH:$PATH"
-
-if ! command -v aarch64-linux-gnu-ld >/dev/null 2>&1; then
-    echo "[aarch64-linux-gnu-ld] does not exist, please check your environment."
-    exit 1
-fi
-
-if ! command -v arm-linux-gnueabi-ld >/dev/null 2>&1; then
-    echo "[arm-linux-gnueabi-ld] does not exist, please check your environment."
-    exit 1
-fi
-
-if ! command -v clang >/dev/null 2>&1; then
-    echo "[clang] does not exist, please check your environment."
-    exit 1
-fi
-
-# Check clang is existing.
-echo "[clang --version]:"
-clang --version
-
 echo "Compile is beginning..."
 
 make $MAKE_ARGS -j"$(nproc)"
