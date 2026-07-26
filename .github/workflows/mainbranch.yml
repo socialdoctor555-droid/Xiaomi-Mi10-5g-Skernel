@@ -1,4 +1,4 @@
-name: Skernel_resukisu_v1(test)
+name: Skernel
 on:
   workflow_dispatch:
 jobs:
