@@ -88,7 +88,6 @@ echo ".........TARGET_DEVICE: Xiaomi Mi 10 5g UMI......"
 echo "Cleaning..."
 
 rm -rf out/
-rm -rf anykernel/
 
 echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
 git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
@@ -104,6 +103,7 @@ dts_source=arch/arm64/boot/dts/vendor/qcom
 cp -a ${dts_source} .dts.bak
 
 echo "Downloading Droidspaces non-GKI kernel patches......."
+
 mkdir -p /tmp/droidspaces-patches
 curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
     "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
