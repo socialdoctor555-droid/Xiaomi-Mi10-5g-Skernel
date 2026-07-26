@@ -1,10 +1,10 @@
-name: Skernel_Resukisu_Susfs_v1(test)
+name: Skernel_Resukisu_susfs_v1(test)
 on:
   workflow_dispatch:
 jobs:
   build:
 
-    name: Build Kernel for Xiaomi Mi10 UMI susfs
+    name: Build Kernel for Xiaomi Mi10 UMI
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Source
@@ -115,40 +115,20 @@ jobs:
       run: |
          DEFCONFIG="vendor/umi_defconfig"
          MAIN_DEFCONFIG="arch/arm64/configs/${DEFCONFIG}"
-         SUSFS_BRANCH="kernel-4.19"
 
-         echo "-- Setting up SUSFS ($SUSFS_BRANCH) --"
+         echo "-- ReSukiSU ships SUSFS support built-in; no external susfs4ksu patch needed --"
          echo "-- Target defconfig: [$MAIN_DEFCONFIG] --"
-
-         git clone --depth=1 -b "$SUSFS_BRANCH" https://gitlab.com/simonpunk/susfs4ksu.git /tmp/susfs4ksu || {
-           echo "-- Fatal: Failed to clone susfs4ksu ($SUSFS_BRANCH)!"; exit 1;
-         }
-
-         echo "-- Copying susfs core source files --"
-         cp /tmp/susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
-         cp /tmp/susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
 
          echo "-- Locating KernelSU driver directory --"
          if [ -d "KernelSU" ]; then
            KSU_DIR="KernelSU"
          else
            echo "-- Fatal: Could not locate the KernelSU driver directory (expected ./KernelSU)."
-           echo "   If ReSukiSU's setup.sh created a differently named folder, update KSU_DIR in this step."
            exit 1
          fi
 
-         echo "-- Applying susfs KSU-side patch (10_enable_susfs_for_ksu.patch) --"
-         ( cd "$KSU_DIR" && patch -p1 -N --fuzz=5 < /tmp/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ) || {
-           echo "-- Fatal: Failed to apply 10_enable_susfs_for_ksu.patch!"; exit 1;
-         }
-
-         echo "-- Applying susfs kernel-side patch (50_add_susfs_in_kernel-4.19.patch) --"
-         patch -p1 -N --fuzz=5 < "/tmp/susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch" || {
-           echo "-- Warning: susfs kernel patch had rejected hunks."
-           echo "   Kernel 4.19 forks commonly reject on missing 'android_kabi_reservedx' struct members."
-           echo "   Check for *.rej files - you may need to manually append the reserved members"
-           echo "   (see susfs4ksu README, kernel-4.19 branch) if the build breaks below."
-         }
+         echo "-- Available SUSFS Kconfig options in this ReSukiSU build: --"
+         grep -rho "config KSU_SUSFS[A-Z_]*" "$KSU_DIR" 2>/dev/null | sort -u || echo "(none found - check KSU_DIR path)"
 
          echo "..............Applying SUSFS kernel configs......."
          {
@@ -170,6 +150,9 @@ jobs:
          } >> "$MAIN_DEFCONFIG"
 
          echo "-- susfs config appended to $MAIN_DEFCONFIG --"
+         echo "-- NOTE: unknown/unsupported CONFIG_KSU_SUSFS_* keys are silently ignored by the kernel build,"
+         echo "   they will just not appear in the generated .config. Compare the grep output above against"
+         echo "   the list appended here if a feature doesn't show up after 'make olddefconfig'."
 
     - name: Config Preparation
       run: |
