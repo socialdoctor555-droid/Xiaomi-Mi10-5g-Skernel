@@ -44,7 +44,6 @@ jobs:
 
     - name: Cloning the necessary resources
       run: |
-
           echo "========== Integrating ReSukiSU =========="
           KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
           KSU_SETUP_BRANCH="main"
