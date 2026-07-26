@@ -1,0 +1,328 @@
+name: Final_Resukisu_susfs_v2(test)
+on:
+  workflow_dispatch:
+jobs:
+  build:
+
+    name: Build Kernel for Xiaomi Mi10 UMI
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Cleanup Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+
+    - name: Setup Cache (ccache)
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ccache_mikernel
+        key: kernel-ccache-umi-build-miui.sh-${{ github.run_id }}
+        restore-keys: |
+          kernel-ccache-umi-build-miui.sh-
+          kernel-ccache-umi-
+          kernel-ccache-
+
+    - name: Setup Toolchain (Neutron Clang 18)
+      run: |
+         mkdir -p $HOME/neutron-clang
+         cd $HOME/neutron-clang
+         wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/05012024/neutron-clang-05012024.tar.zst
+         tar --zstd -xvf neutron-clang-05012024.tar.zst
+
+    - name: Integrate SUSFS Kernel Patch
+      run: |
+         echo "========== Applying SUSFS kernel-side patch (kernel 4.19) =========="
+         # This is the piece the previous workflow was missing: ReSukiSU only provides
+         # the KernelSU-side glue code for SUSFS, it does NOT patch the core kernel
+         # (fs/, include/linux/) with susfs_def.h, susfs.c, or the hooks in files like
+         # fs/proc/task_mmu.c. Without this, drivers/kernelsu/Kbuild aborts the build
+         # with "You have not integrated susfs in your kernel yet."
+         SUSFS_PATCH_URL="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Patch/susfs_patch_to_4.19.patch"
+
+         echo "-- Downloading SUSFS kernel patch for 4.19..."
+         curl -LSs --fail --retry 3 -o /tmp/susfs_patch_to_4.19.patch "$SUSFS_PATCH_URL" || {
+           echo "Fatal: failed to download susfs_patch_to_4.19.patch!"
+           exit 1
+         }
+
+         echo "-- Applying SUSFS kernel patch..."
+         set +e
+         patch -p1 --fuzz=5 --forward < /tmp/susfs_patch_to_4.19.patch
+         PATCH_RC=$?
+         set -e
+
+         REJ_FILES=$(find . -name "*.rej")
+         if [ -n "$REJ_FILES" ]; then
+           echo "-- The following hunks did not apply cleanly:"
+           for f in $REJ_FILES; do
+             echo "  ===== $f ====="
+             cat "$f"
+             echo "  ============================================="
+           done
+         fi
+
+         echo "-- Verifying core susfs headers/sources landed in the tree..."
+         MISSING=0
+         for f in include/linux/susfs.h include/linux/susfs_def.h fs/susfs.c; do
+           if [ ! -f "$f" ]; then
+             echo "Fatal: expected file '$f' is missing after patching."
+             MISSING=1
+           fi
+         done
+         if [ "$MISSING" -eq 1 ]; then
+           exit 1
+         fi
+
+         # Known issue: fs/proc/task_mmu.c hunk #8 can fail on kernels whose task_mmu.c
+         # has drifted from the patch's expected base. Everything else (susfs.c,
+         # susfs.h, susfs_def.h, the fs/*.c hooks) is what unblocks the
+         # "You have not integrated susfs in your kernel yet" Kbuild check, so we treat
+         # a lone task_mmu.c reject as non-fatal for now and continue - just be aware
+         # the specific feature in that hunk (inspect the .rej above) won't be active
+         # until it's resolved by hand.
+         if [ -n "$REJ_FILES" ]; then
+           ONLY_TASK_MMU=$(echo "$REJ_FILES" | grep -v "fs/proc/task_mmu.c.rej" || true)
+           if [ -z "$ONLY_TASK_MMU" ]; then
+             echo "-- WARNING: fs/proc/task_mmu.c hunk failed but core SUSFS files are in place."
+             echo "   Continuing build. See the reject content printed above."
+           else
+             echo "Fatal: unexpected reject(s) outside fs/proc/task_mmu.c.rej - resolve before continuing."
+             exit 1
+           fi
+         fi
+
+         echo "-- SUSFS kernel patch integrated (see warnings above, if any)."
+
+    - name: Cloning the necessary resources
+      run: |
+          echo "========== Integrating ReSukiSU =========="
+          KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
+          KSU_SETUP_BRANCH="main"
+          echo "-- Running ReSukiSU setup..."
+          curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
+          echo "ReSukiSU setup failed!"
+          exit 1
+          }
+
+          echo "-- Applying SuSFS inline hook patches..."
+          curl -LSs --fail --retry 3 "https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh" | bash || {
+          echo "Inline hook patch failed!"
+          exit 1
+          }
+
+          echo "-- DEBUG: locating init_rc_hook symbol --"
+          grep -rln "ksu_is_init_rc_hook_enabled\|ksu_init_rc_hook" . --include=*.h --include=*.c || echo "not found anywhere"
+
+          echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
+          git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
+          echo ".......Anykernel sources cloned....."
+
+          echo "Downloading Droidspaces non-GKI kernel patches......."
+          mkdir -p /tmp/droidspaces-patches
+          curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
+          "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
+
+          echo "Building for MIUI Display configuration....."
+          dts_source=arch/arm64/boot/dts/vendor/qcom
+          cp -a ${dts_source} .dts.bak
+
+    - name: Nomount Integration
+      run: |
+         DEFCONFIG="vendor/umi_defconfig"
+         MAIN_DEFCONFIG="arch/arm64/configs/${DEFCONFIG}"
+         KERNEL_VERSION=$(grep -m1 '^VERSION = ' Makefile | awk '{print $3}').$(grep -m1 '^PATCHLEVEL = ' Makefile | awk '{print $3}')
+
+         # Default exports
+         export NOMOUNT_PATCH="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/patches/nomount_${KERNEL_VERSION}_kernel_integration.patch"
+         export NOMOUNT_CODE="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/src/nomount.c"
+         export NOMOUNT_HEADER="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/src/nomount.h"
+
+         echo "-- Setting up nomount for kernel version [$KERNEL_VERSION] --"
+         echo "-- Target defconfig: [$MAIN_DEFCONFIG] --"
+
+         # Download nomount patch, code, and header
+         wget -qO- "$NOMOUNT_PATCH" | patch -s -p1 --fuzz=5 || { echo "-- Fatal: Failed to apply nomount patch!"; exit 1; }
+         wget -qO- "$NOMOUNT_CODE" > "${PWD}/fs/nomount.c" || { echo "-- Fatal: Failed to download nomount.c!"; exit 1; }
+         wget -qO- "$NOMOUNT_HEADER" > "${PWD}/fs/nomount.h" || { echo "-- Fatal: Failed to download nomount.h!"; exit 1; }
+
+         # Enable the necessary Nomount configs
+         echo "CONFIG_NOMOUNT=y" >> "$MAIN_DEFCONFIG"
+         echo "-- nomount config appended to $MAIN_DEFCONFIG --"
+
+    - name: Rekernel Integration
+      run: |
+         DEFCONFIG="vendor/umi_defconfig"
+         MAIN_DEFCONFIG="arch/arm64/configs/${DEFCONFIG}"
+
+         # Default exports
+         export REKERNEL_PATCH="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Rekernel/rekernel_patches.sh"
+         export REKERNEL_EXTRA="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Rekernel/rekernel_extra.patch"
+
+         echo "-- Setting up rekernel..."
+         echo "-- Target defconfig: [$MAIN_DEFCONFIG] --"
+
+         # Download rekernel patch and extra patch
+         wget -qO- "$REKERNEL_PATCH" | bash || { echo "-- Fatal: Failed to apply rekernel patch!"; exit 1; }
+         wget -qO- "$REKERNEL_EXTRA" | patch -s -p1 --fuzz=5 || { echo "-- Fatal: Failed to apply rekernel extra patch!"; exit 1; }
+
+         # Enable the necessary Rekernel configs
+         echo "CONFIG_REKERNEL=y" >> "$MAIN_DEFCONFIG"
+         echo "-- rekernel config appended to $MAIN_DEFCONFIG --"
+
+    - name: SUSFS Integration
+      run: |
+         DEFCONFIG="vendor/umi_defconfig"
+         MAIN_DEFCONFIG="arch/arm64/configs/${DEFCONFIG}"
+
+         echo "-- Kernel source was already patched with susfs_patch_to_4.19.patch in the"
+         echo "   'Integrate SUSFS Kernel Patch' step. This step only wires up the Kconfig --"
+         echo "-- Target defconfig: [$MAIN_DEFCONFIG] --"
+
+         echo "-- Locating KernelSU driver directory --"
+         if [ -d "KernelSU" ]; then
+           KSU_DIR="KernelSU"
+         else
+           echo "-- Fatal: Could not locate the KernelSU driver directory (expected ./KernelSU)."
+           exit 1
+         fi
+
+         echo "-- Available SUSFS Kconfig options in this ReSukiSU build: --"
+         grep -rho "config KSU_SUSFS[A-Z_]*" "$KSU_DIR" 2>/dev/null | sort -u || echo "(none found - check KSU_DIR path)"
+
+         echo "..............Applying SUSFS kernel configs......."
+         {
+           echo "CONFIG_KSU_SUSFS=y"
+           echo "CONFIG_KSU_SUSFS_SUS_PATH=y"
+           echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y"
+           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y"
+           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y"
+           echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y"
+           echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y"
+           echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y"
+           echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
+           echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y"
+           echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
+           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
+           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
+           # Manual (non-kprobe) hook is already integrated -> sus_su MUST stay disabled
+           echo "CONFIG_KSU_SUSFS_SUS_SU=n"
+         } >> "$MAIN_DEFCONFIG"
+
+         echo "-- susfs config appended to $MAIN_DEFCONFIG --"
+         echo "-- NOTE: unknown/unsupported CONFIG_KSU_SUSFS_* keys are silently ignored by the kernel build,"
+         echo "   they will just not appear in the generated .config. Compare the grep output above against"
+         echo "   the list appended here if a feature doesn't show up after 'make olddefconfig'."
+
+    - name: Config Preparation
+      run: |
+         # NOTE: these defaults must match the ones in build-miui.sh.
+         export PATH="$HOME/neutron-clang/bin:/usr/lib/ccache:$PATH"
+         export CCACHE_DIR="$HOME/.cache/ccache_mikernel"
+         export CC="clang"
+         export CXX="clang++"
+         export CCACHE_COMPILERCHECK=content
+         export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
+
+         DEFCONFIG="vendor/umi_defconfig"
+
+         MAKE_ARGS="ARCH=arm64 \
+           SUBARCH=arm64 \
+           O=out \
+           CC=clang \
+           HOSTCC=clang \
+           CLANG_TRIPLE=aarch64-linux-gnu- \
+           CROSS_COMPILE=aarch64-linux-gnu- \
+           CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+           CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+           LD=ld.lld \
+           AR=llvm-ar \
+           NM=llvm-nm \
+           OBJCOPY=llvm-objcopy \
+           OBJDUMP=llvm-objdump \
+           STRIP=llvm-strip"
+
+         echo "CCACHE_DIR: [$CCACHE_DIR]"
+         echo "DEFCONFIG: [$DEFCONFIG]"
+
+         echo "......Generating base defconfig......."
+         make $MAKE_ARGS "$DEFCONFIG"
+
+         echo "-- Exporting required SELinux symbols..."
+         unstatic() {
+         local file="$1"
+         local regex="$2"
+
+         if [ -f "$file" ] && grep -q "static $regex" "$file" 2>/dev/null; then
+         sed -i "s/static $regex/$regex/" "$file"
+         echo "  -> Exported: $regex"
+         fi
+         }
+         unstatic "security/selinux/selinuxfs.c" "const struct file_operations sel_handle_status_ops"
+         unstatic "security/selinux/selinuxfs.c" "DEFINE_MUTEX(sel_mutex);"
+         unstatic "security/selinux/ss/services.c" "struct page \*selinux_status_page;"
+         unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
+         unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
+         unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
+
+         echo "..............Applying Droidspaces required kernel configs......."
+         ./scripts/config --file out/.config \
+         --enable CONFIG_NAMESPACES \
+         --enable CONFIG_PID_NS \
+         --enable CONFIG_UTS_NS \
+         --enable CONFIG_SYSVIPC \
+         --enable CONFIG_IPC_NS \
+         --enable CONFIG_DEVTMPFS
+
+         echo "........Resukisu Integration..........."
+         ./scripts/config --file out/.config \
+         --enable CONFIG_KSU \
+         --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
+         --enable CONFIG_KPM \
+         --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
+         --enable CONFIG_THREAD_INFO_IN_TASK
+
+         echo "Resolving config dependencies......."
+         make $MAKE_ARGS olddefconfig
+
+    - name: Applying Droidspaces Patches
+      run: |
+         echo "Applying Droidspaces non-GKI kernel patches......."
+         for patch_file in /tmp/droidspaces-patches/*.patch; do
+         echo "  -> Applying: $(basename "$patch_file")"
+         if ! patch -p1 -N --forward < "$patch_file"; then
+         echo "     Note: patch may already be applied or failed to apply cleanly - check manually if the build breaks."
+         fi
+         done
+
+    - name: Build Kernel
+      run: |
+        chmod +x build-miui.sh
+        echo "Using build-miui.sh....."
+        bash build-miui.sh
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: Skernel_Resukisu_v1(test)
+        path: ./*.zip
+        if-no-files-found: error
+
+    - name: Upload Patch Rejects (debug)
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: susfs-patch-rejects
+        path: "**/*.rej"
+        if-no-files-found: ignore
