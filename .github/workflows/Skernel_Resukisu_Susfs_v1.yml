@@ -235,13 +235,19 @@ jobs:
          echo "     Note: patch may already be applied or failed to apply cleanly - check manually if the build breaks."
          fi
          done
-         
+
          echo "===== Checking ReSukiSU hooks ====="
-         grep -n "ksu_handle_setresuid" kernel/sys.c
-         grep -n "ksu_handle_execveat" fs/exec.c
-         grep -n "ksu_handle_faccessat" fs/open.c
-         grep -n "ksu_handle_sys_read" fs/read_write.c
-         grep -n "ksu_handle_stat" fs/stat.c
+
+          for f in \
+          kernel/sys.c \
+          fs/exec.c \
+          fs/open.c \
+          fs/read_write.c \
+          fs/stat.c
+          do
+          echo "--- $f ---"
+          grep -n "ksu_handle_" "$f" || echo "No hook found"
+          done
 
     - name: Build Kernel
       run: |
