@@ -72,6 +72,9 @@ jobs:
 
     - name: Defconfig Preperation
       run: |
+         TOOLCHAIN_PATH=$HOME/neutron-clang/bin
+         GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD)
+         TARGET_DEVICE=umi
 
          # Enable ccache for speed up compiling 
          export CCACHE_DIR="$HOME/.cache/ccache_mikernel" 
