@@ -84,9 +84,6 @@ echo "[clang --version]:"
 clang --version
 
 echo ".........TARGET_DEVICE: Xiaomi Mi 10 5g UMI......"
-echo "Cleaning..."
-
-rm -rf out/
 
 echo "Applying Droidspaces non-GKI kernel patches......."
 for patch_file in /tmp/droidspaces-patches/*.patch; do
@@ -115,19 +112,6 @@ unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
 unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
 unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
 
-#echo "========== Integrating SUSFS =========="
-
-echo "-- Applying kernel-side susfs patch (conflicts against our manual hooks are possible)..."
-cp "$SUSFS_DIR/kernel_patches/50_add_susfs_in_kernel-4.19.patch" ./susfs_kernel.patch
-patch -p1 -N --forward < susfs_kernel.patch || {
-    echo "Note: some hunks may have failed against fs/stat.c, fs/exec.c, fs/open.c"
-    echo "      (they were already hand-modified for ReSukiSU manual hooks)."
-    echo "      Check for *.rej files below:"
-    find . -name "*.rej"
-}
-
-echo "========== SUSFS integration completed =========="
-
 make $MAKE_ARGS ${DEFCONFIG}
 
 echo "..............Applying Droidspaces required kernel configs......."
@@ -147,19 +131,6 @@ echo "........Resukisu Integration..........."
     --enable CONFIG_KSU_MANUAL_HOOK \
     --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
     --enable CONFIG_THREAD_INFO_IN_TASK
-
-echo "============= .....Applying Susfs Integration.... =============="
-./scripts/config --file out/.config \
-    --enable CONFIG_KSU_SUSFS_SUS_PATH \
-    --enable CONFIG_KSU_SUSFS_SUS_MOUNT \
-    --enable CONFIG_KSU_SUSFS_SUS_KSTAT \
-    --enable CONFIG_KSU_SUSFS_SPOOF_UNAME \
-    --enable CONFIG_KSU_SUSFS_ENABLE_LOG \
-    --enable CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-    --enable CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-    --enable CONFIG_KSU_SUSFS_OPEN_REDIRECT \
-    --enable CONFIG_KSU_SUSFS_SUS_MAP \
-    --enable CONFIG_KSU_SUSFS_TRY_UMOUNT \
 
 echo "Resolving config dependencies......."
 make $MAKE_ARGS olddefconfig
