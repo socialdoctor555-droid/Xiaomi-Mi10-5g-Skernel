@@ -1,4 +1,4 @@
-name: Skernel_resukisu_v1(test)
+name: Skernel_resukisu_susfs_v1(test)
 on:
   workflow_dispatch:
 jobs:
@@ -262,6 +262,6 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: Skernel_Resukisu_v1(test)
+        name: Skernel_Resukisu_sufs_v1(test)
         path: ./*.zip
         if-no-files-found: error
