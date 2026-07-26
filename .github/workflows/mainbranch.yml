@@ -40,6 +40,11 @@ jobs:
          cd $HOME/neutron-clang
          wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/05012024/neutron-clang-05012024.tar.zst
          tar --zstd -xvf neutron-clang-05012024.tar.zst
+
+
+    - name: Cloning the necessary resources
+      run: |
+          
          
     - name: Build Kernel
       run: |
