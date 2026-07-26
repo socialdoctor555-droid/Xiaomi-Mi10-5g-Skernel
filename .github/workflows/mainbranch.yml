@@ -1,8 +1,6 @@
-name: APT-n0kernel(staging-umi)
-
+name: Skernel_resukisu_v1(test)
 on:
   workflow_dispatch:
- 
 jobs:
   build:
     name: Build Kernel for Xiaomi Mi10 UMI
@@ -37,8 +35,8 @@ jobs:
 
     - name: Setup Toolchain (Neutron Clang 18)
       run: |
-         mkdir -p $HOME/zyc-clang
-         cd $HOME/zyc-clang
+         mkdir -p $HOME/neutron-clang
+         cd $HOME/neutron-clang
          wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/05012024/neutron-clang-05012024.tar.zst
          tar --zstd -xvf neutron-clang-05012024.tar.zst
          
@@ -51,6 +49,6 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: Skernelv1
+        name: Skernel_Resukisu_v1(test)
         path: ./*.zip
         if-no-files-found: error
