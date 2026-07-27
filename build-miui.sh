@@ -93,7 +93,7 @@ echo "Build for MIUI finished."
 # ------------- End of Building for MIUI -------------
 #  If you don't need MIUI you can comment out the above block [Building for MIUI]
 cd anykernel
-ZIP_FILENAME=Skernelv1.zip
+ZIP_FILENAME=O-Kernel_v1.zip
 zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore 'out/*' './*.zip'
 mv "$ZIP_FILENAME" ../
 cd ..
