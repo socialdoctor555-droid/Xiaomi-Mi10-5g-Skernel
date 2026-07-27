@@ -43,12 +43,7 @@ jobs:
 
     - name: Integrate SUSFS Kernel Patch
       run: |
-         echo "========== Applying SUSFS kernel-side patch (kernel 4.19) =========="
-         # This is the piece the previous workflow was missing: ReSukiSU only provides
-         # the KernelSU-side glue code for SUSFS, it does NOT patch the core kernel
-         # (fs/, include/linux/) with susfs_def.h, susfs.c, or the hooks in files like
-         # fs/proc/task_mmu.c. Without this, drivers/kernelsu/Kbuild aborts the build
-         # with "You have not integrated susfs in your kernel yet."
+         
          SUSFS_PATCH_URL="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Patch/susfs_patch_to_4.19.patch"
 
          echo "-- Downloading SUSFS kernel patch for 4.19..."
@@ -62,47 +57,6 @@ jobs:
          patch -p1 --fuzz=5 --forward < /tmp/susfs_patch_to_4.19.patch
          PATCH_RC=$?
          set -e
-
-         REJ_FILES=$(find . -name "*.rej")
-         if [ -n "$REJ_FILES" ]; then
-           echo "-- The following hunks did not apply cleanly:"
-           for f in $REJ_FILES; do
-             echo "  ===== $f ====="
-             cat "$f"
-             echo "  ============================================="
-           done
-         fi
-
-         echo "-- Verifying core susfs headers/sources landed in the tree..."
-         MISSING=0
-         for f in include/linux/susfs.h include/linux/susfs_def.h fs/susfs.c; do
-           if [ ! -f "$f" ]; then
-             echo "Fatal: expected file '$f' is missing after patching."
-             MISSING=1
-           fi
-         done
-         if [ "$MISSING" -eq 1 ]; then
-           exit 1
-         fi
-
-         # Known issue: fs/proc/task_mmu.c hunk #8 can fail on kernels whose task_mmu.c
-         # has drifted from the patch's expected base. Everything else (susfs.c,
-         # susfs.h, susfs_def.h, the fs/*.c hooks) is what unblocks the
-         # "You have not integrated susfs in your kernel yet" Kbuild check, so we treat
-         # a lone task_mmu.c reject as non-fatal for now and continue - just be aware
-         # the specific feature in that hunk (inspect the .rej above) won't be active
-         # until it's resolved by hand.
-         if [ -n "$REJ_FILES" ]; then
-           ONLY_TASK_MMU=$(echo "$REJ_FILES" | grep -v "fs/proc/task_mmu.c.rej" || true)
-           if [ -z "$ONLY_TASK_MMU" ]; then
-             echo "-- WARNING: fs/proc/task_mmu.c hunk failed but core SUSFS files are in place."
-             echo "   Continuing build. See the reject content printed above."
-           else
-             echo "Fatal: unexpected reject(s) outside fs/proc/task_mmu.c.rej - resolve before continuing."
-             exit 1
-           fi
-         fi
-
          echo "-- SUSFS kernel patch integrated (see warnings above, if any)."
 
     - name: Cloning the necessary resources
@@ -258,51 +212,6 @@ jobs:
 
          echo "......Generating base defconfig......."
          make $MAKE_ARGS "$DEFCONFIG"
-
-         echo "-- Exporting required SELinux symbols..."
-         unstatic() {
-         local file="$1"
-         local regex="$2"
-
-         if [ ! -f "$file" ]; then
-         echo "  -> WARNING: file not found, skipping: $file"
-         elif grep -q "static $regex" "$file" 2>/dev/null; then
-         sed -i "s/static $regex/$regex/" "$file"
-         echo "  -> Exported: $regex"
-         else
-         echo "  -> WARNING: pattern not found in $file, symbol stays static: $regex"
-         fi
-         }
-         unstatic "security/selinux/selinuxfs.c" "const struct file_operations sel_handle_status_ops"
-         unstatic "security/selinux/selinuxfs.c" "DEFINE_MUTEX(sel_mutex);"
-         unstatic "security/selinux/ss/services.c" "struct page \*selinux_status_page;"
-         unstatic "security/selinux/ss/services.c" "DEFINE_MUTEX(selinux_status_lock);"
-         unstatic "security/selinux/ss/services.c" "DEFINE_RWLOCK(policy_rwlock);"
-         unstatic "security/selinux/hooks.c" "struct security_operations selinux_ops"
-
-         echo "-- Locating write_op declaration for selinux_hide export..."
-         WRITE_OP_FILE=$(grep -rl "write_op\[\]" security/selinux/ 2>/dev/null | head -n1)
-         if [ -z "$WRITE_OP_FILE" ]; then
-           echo "  -> WARNING: could not locate 'write_op[]' anywhere under security/selinux/"
-           echo "  -> Searching whole tree as fallback..."
-           WRITE_OP_FILE=$(grep -rl "write_op\[\]" --include=*.c . 2>/dev/null | head -n1)
-         fi
-         if [ -z "$WRITE_OP_FILE" ]; then
-           echo "  -> WARNING: 'write_op[]' not found anywhere in the tree. Cannot export it."
-         else
-           echo "  -> Found in: $WRITE_OP_FILE"
-           echo "  -> Before:"
-           grep -n "write_op\[\]" "$WRITE_OP_FILE"
-           if grep -qE "^static.*write_op\[\]" "$WRITE_OP_FILE"; then
-             sed -i '/write_op\[\]/ s/^static //' "$WRITE_OP_FILE"
-             echo "  -> Exported: write_op[] in $WRITE_OP_FILE"
-           else
-             echo "  -> WARNING: line containing 'write_op[]' does not start with 'static' - inspect manually, forcing removal of any leading 'static' token on that line as a best effort."
-             sed -i '/write_op\[\]/ s/\bstatic[[:space:]]\+//' "$WRITE_OP_FILE"
-           fi
-           echo "  -> After:"
-           grep -n "write_op\[\]" "$WRITE_OP_FILE"
-         fi
 
          echo "..............Applying Droidspaces required kernel configs......."
          ./scripts/config --file out/.config \
