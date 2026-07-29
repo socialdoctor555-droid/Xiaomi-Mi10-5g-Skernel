@@ -71,46 +71,10 @@ jobs:
           set -euo pipefail
           "$HOME/neutron-clang/bin/clang" --version
 
-      - name: Integrate SUSFS Kernel Patch
-        run: |
-          set -uo pipefail
-          SUSFS_PATCH_URL="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Patch/susfs_patch_to_4.19.patch"
-
-          echo "-- Downloading SUSFS kernel patch for 4.19..."
-          curl -LSs --fail --retry 3 -o /tmp/susfs_patch_to_4.19.patch "$SUSFS_PATCH_URL" || {
-            echo "Fatal: failed to download susfs_patch_to_4.19.patch!"
-            exit 1
-          }
-
-          echo "-- Applying SUSFS kernel patch..."
-          # Fuzzy patch application is tolerated here: partial/rejected hunks are
-          # expected on some kernel trees and are surfaced via the "Upload Patch
-          # Rejects" step below for manual review, rather than failing the build.
-          patch -p1 --fuzz=5 --forward < /tmp/susfs_patch_to_4.19.patch
-          PATCH_RC=$?
-          echo "-- SUSFS kernel patch integrated (exit code: $PATCH_RC, see warnings above if any)."
-
       - name: Cloning the necessary resources
         run: |
           set -euo pipefail
-          echo "========== Integrating ReSukiSU =========="
-          KSU_SETUP_URI="https://github.com/ReSukiSU/ReSukiSU/raw/refs/heads/main/kernel/setup.sh"
-          KSU_SETUP_BRANCH="main"
-          echo "-- Running ReSukiSU setup..."
-          curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
-            echo "ReSukiSU setup failed!"
-            exit 1
-          }
-
-          echo "-- Applying SuSFS inline hook patches..."
-          curl -LSs --fail --retry 3 "https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh" | bash || {
-            echo "Inline hook patch failed!"
-            exit 1
-          }
-
-          echo "-- DEBUG: locating init_rc_hook symbol --"
-          grep -rln "ksu_is_init_rc_hook_enabled\|ksu_init_rc_hook" . --include=*.h --include=*.c || echo "not found anywhere"
-
+          
           echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
           git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
           echo ".......Anykernel sources cloned....."
@@ -119,47 +83,6 @@ jobs:
           mkdir -p /tmp/droidspaces-patches
           curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
             "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
-
-      - name: Nomount Integration
-        run: |
-          set -euo pipefail
-          KERNEL_VERSION=$(grep -m1 '^VERSION = ' Makefile | awk '{print $3}').$(grep -m1 '^PATCHLEVEL = ' Makefile | awk '{print $3}')
-
-          NOMOUNT_PATCH="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/patches/nomount_${KERNEL_VERSION}_kernel_integration.patch"
-          NOMOUNT_CODE="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/src/nomount.c"
-          NOMOUNT_HEADER="https://github.com/maxsteeel/nomount/raw/refs/heads/master/kernel/src/nomount.h"
-
-          echo "-- Detected kernel version: $KERNEL_VERSION"
-          wget -qO- "$NOMOUNT_PATCH" | patch -s -p1 --fuzz=5 || { echo "-- Fatal: Failed to apply nomount patch!"; exit 1; }
-          wget -qO- "$NOMOUNT_CODE" > "${PWD}/fs/nomount.c" || { echo "-- Fatal: Failed to download nomount.c!"; exit 1; }
-          wget -qO- "$NOMOUNT_HEADER" > "${PWD}/fs/nomount.h" || { echo "-- Fatal: Failed to download nomount.h!"; exit 1; }
-
-      - name: Rekernel Integration
-        run: |
-          set -euo pipefail
-          REKERNEL_PATCH="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Rekernel/rekernel_patches.sh"
-          REKERNEL_EXTRA="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Rekernel/rekernel_extra.patch"
-
-          wget -qO- "$REKERNEL_PATCH" | bash || { echo "-- Fatal: Failed to apply rekernel patch!"; exit 1; }
-          wget -qO- "$REKERNEL_EXTRA" | patch -s -p1 --fuzz=5 || { echo "-- Fatal: Failed to apply rekernel extra patch!"; exit 1; }
-
-      - name: Verify SUSFS/KernelSU Integration
-        run: |
-          set -euo pipefail
-          echo "-- Locating KernelSU driver directory --"
-          KSU_DIR=$(find . -maxdepth 2 -type d -iname "KernelSU*" | head -n1 || true)
-          if [ -z "$KSU_DIR" ]; then
-            echo "Fatal: KernelSU driver directory not found after ReSukiSU setup!"
-            exit 1
-          fi
-          echo "-- Found KernelSU driver at: $KSU_DIR"
-
-          echo "-- Verifying CONFIG_KSU_SUSFS is available in Kconfig --"
-          if ! grep -rq "CONFIG_KSU_SUSFS" "$KSU_DIR"; then
-            echo "Fatal: CONFIG_KSU_SUSFS not found in $KSU_DIR - SUSFS patch may not have applied cleanly."
-            exit 1
-          fi
-          echo "-- SUSFS/KernelSU integration verified."
 
       - name: Config Preparation
         run: |
@@ -212,7 +135,9 @@ jobs:
             -e MIUI_ZRAM_MEMORY_TRACKING \
             -e BOOTUP_RECLAIM \
             -e MI_RECLAIM \
-            -e RTMM
+            -e RTMM \
+            -d REKERNEL \
+            -d REKERNEL_NETWORK
 
           echo "..............Applying Droidspaces required kernel configs......."
           ./scripts/config --file out/.config \
@@ -222,17 +147,6 @@ jobs:
             --enable CONFIG_SYSVIPC \
             --enable CONFIG_IPC_NS \
             --enable CONFIG_DEVTMPFS
-
-          echo "..............RESUKISU Configurations................"
-          ./scripts/config --file out/.config \
-            --enable CONFIG_KSU \
-            --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-            --enable CONFIG_KPM \
-            --enable CONFIG_HAVE_SYSCALL_TRACEPOINTS \
-            --enable CONFIG_THREAD_INFO_IN_TASK \
-            --enable CONFIG_KSU_SUSFS \
-            --enable CONFIG_REKERNEL \
-            --enable CONFIG_NOMOUNT
 
           echo "Resolving config dependencies......."
           make $MAKE_ARGS olddefconfig
