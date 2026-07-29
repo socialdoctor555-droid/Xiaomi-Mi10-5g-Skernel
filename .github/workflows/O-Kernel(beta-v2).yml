@@ -84,12 +84,34 @@ jobs:
           curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
             "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
 
-
       - name: Integrate KernelSU-Next
         run: |
             set -euo pipefail
             echo "Integrating KernelSU-Next into kernel source tree......."
              curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+
+      - name: Integrate SUSFS Kernel Patch
+        run: |
+         
+         SUSFS_PATCH_URL="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Patch/susfs_patch_to_4.19.patch"
+
+         echo "-- Downloading SUSFS kernel patch for 4.19..."
+         curl -LSs --fail --retry 3 -o /tmp/susfs_patch_to_4.19.patch "$SUSFS_PATCH_URL" || {
+           echo "Fatal: failed to download susfs_patch_to_4.19.patch!"
+           exit 1
+         }
+         echo "-- Applying SUSFS kernel patch..."
+         set +e
+         patch -p1 --fuzz=5 --forward < /tmp/susfs_patch_to_4.19.patch
+         PATCH_RC=$?
+         set -e
+         echo "-- SUSFS kernel patch integrated (see warnings above, if any)."
+
+          echo "-- Applying SuSFS inline hook patches..."
+          curl -LSs --fail --retry 3 "https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh" | bash || {
+          echo "Inline hook patch failed!"
+          exit 1
+          } 
 
       - name: Config Preparation
         run: |
@@ -101,6 +123,10 @@ jobs:
           export CXX="clang++"
           export CCACHE_COMPILERCHECK=content
           export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
+          export KBUILD_BUILD_USER="O-Kernel"
+          export KBUILD_BUILD_HOST="umi-kernel"
+          export KBUILD_BUILD_TIMESTAMP="$(date)"
+          export ARCH=arm64
 
           MAKE_ARGS="ARCH=arm64 \
             SUBARCH=arm64 \
