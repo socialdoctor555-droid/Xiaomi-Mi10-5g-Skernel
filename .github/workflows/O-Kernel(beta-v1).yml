@@ -1,4 +1,4 @@
-name: O-Kernel(Hyperos)Mi10
+name: O-Kernel(beta-v1)
 on:
   workflow_dispatch:
 jobs:
