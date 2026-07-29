@@ -1,4 +1,4 @@
-name: Check-v1(test)
+name: O-Kernel(Hyperos)Mi10
 on:
   workflow_dispatch:
 jobs:
@@ -156,6 +156,26 @@ jobs:
          echo "......Generating base defconfig......."
          make $MAKE_ARGS "$DEFCONFIG"
 
+         echo "......Appending Miui specific Configs........."
+         ./scripts/config --file out/.config \
+            -e PERF_CRITICAL_RT_TASK \
+            -e SF_BINDER \
+            -e OVERLAY_FS \
+            -e MIGT \
+            -e MIGT_ENERGY_MODEL \
+            -e MIHW \
+            -e PACKAGE_RUNTIME_INFO \
+            -e BINDER_OPT \
+            -e KPERFEVENTS \
+            -e MILLET \
+            -e PERF_HUMANTASK \
+            -e XIAOMI_MIUI \
+            -e TASK_DELAY_ACCT \
+            -e MIUI_ZRAM_MEMORY_TRACKING \
+            -e BOOTUP_RECLAIM \
+            -e MI_RECLAIM \
+            -e RTMM
+          
          echo "..............Applying Droidspaces required kernel configs......."
          ./scripts/config --file out/.config \
          --enable CONFIG_NAMESPACES \
@@ -191,14 +211,14 @@ jobs:
 
     - name: Build Kernel
       run: |
-        chmod +x build-miui.sh
-        echo "Using build-miui.sh....."
-        bash build-miui.sh
+        chmod +x build-okernel.sh
+        echo "Using build-okernel.sh....."
+        bash build-okernel.sh
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: O-Kernel_v1
+        name: O-Kernel(Hyperos)Mi10
         path: ./*.zip
         if-no-files-found: error
 
