@@ -1,0 +1,307 @@
+name: O-Kernel(beta-v2)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEUTRON_CLANG_URL: https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/05012024/neutron-clang-05012024.tar.zst
+  NEUTRON_CLANG_TAG: 05012024
+  DEFCONFIG: vendor/umi_defconfig
+
+jobs:
+  build:
+    name: Build Kernel for Xiaomi Mi10 UMI
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Cleanup Disk Space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Install Dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+
+      - name: Setup Cache (ccache)
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache_mikernel
+          key: kernel-ccache-umi-build-miui.sh-${{ github.run_id }}
+          restore-keys: |
+            kernel-ccache-umi-build-miui.sh-
+            kernel-ccache-umi-
+            kernel-ccache-
+
+      - name: Cache Toolchain (Neutron Clang 18)
+        id: cache-toolchain
+        uses: actions/cache@v5
+        with:
+          path: ~/neutron-clang
+          key: neutron-clang-${{ env.NEUTRON_CLANG_TAG }}
+
+      - name: Setup Toolchain (Neutron Clang 18)
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/neutron-clang"
+          cd "$HOME/neutron-clang"
+          wget -q "$NEUTRON_CLANG_URL" -O neutron-clang.tar.zst
+          tar --zstd -xf neutron-clang.tar.zst
+          rm -f neutron-clang.tar.zst
+
+      - name: Verify Toolchain
+        run: |
+          set -euo pipefail
+          "$HOME/neutron-clang/bin/clang" --version
+
+      - name: Cloning the necessary resources
+        run: |
+          set -euo pipefail
+
+          echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
+          git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
+          echo ".......Anykernel sources cloned....."
+
+          echo "Downloading Droidspaces non-GKI kernel patches......."
+          mkdir -p /tmp/droidspaces-patches
+          curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
+            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
+
+      - name: Integrate KernelSU-Next
+        run: |
+            set -euo pipefail
+            echo "Integrating KernelSU-Next into kernel source tree (legacy/manual-hook mode)......."
+            # NOTE: "-s legacy" is required because we run in CONFIG_KSU_MANUAL_HOOK mode
+            # (no kprobes on this 4.19 non-GKI target). Default (no arg) mode wires up
+            # kprobe-hook symbols that will be left undefined without CONFIG_KPROBES,
+            # causing ld.lld "undefined symbol: ksu_execveat_hook / ksu_vfs_read_hook /
+            # ksu_input_hook" errors at link time.
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+
+            echo "Neutralizing CONFIG_KPROBES branches inside KernelSU-Next (per susfs4ksu README)......."
+            # susfs4ksu's own integration notes require this: force every KPROBES-guarded
+            # code path in the KSU-Next source tree to compile out, so nothing in there
+            # silently assumes kprobe hooks are active even if CONFIG_KPROBES leaks in
+            # from a defconfig fragment somewhere.
+            KSU_DIR=""
+            for d in KernelSU-Next KernelSU; do
+              if [ -d "$d" ]; then
+                KSU_DIR="$d"
+                break
+              fi
+            done
+
+            if [ -z "$KSU_DIR" ]; then
+              echo "Fatal: could not locate KernelSU-Next source directory after setup.sh ran!" >&2
+              exit 1
+            fi
+
+            echo "-- Found KernelSU-Next source at: $KSU_DIR"
+            find "$KSU_DIR" -type f \( -name '*.c' -o -name '*.h' \) -print0 | \
+              xargs -0 sed -i 's/#ifdef CONFIG_KPROBES/#if defined(CONFIG_KPROBES) \&\& 0/g'
+
+            echo "-- Sanity check: remaining bare '#ifdef CONFIG_KPROBES' occurrences (should be 0):"
+            grep -rl '#ifdef CONFIG_KPROBES' "$KSU_DIR" || echo "  none found - good."
+
+      - name: Integrate SUSFS Kernel Patch
+        run: |
+         
+         SUSFS_PATCH_URL="https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/Patch/susfs_patch_to_4.19.patch"
+
+         echo "-- Downloading SUSFS kernel patch for 4.19..."
+         curl -LSs --fail --retry 3 -o /tmp/susfs_patch_to_4.19.patch "$SUSFS_PATCH_URL" || {
+           echo "Fatal: failed to download susfs_patch_to_4.19.patch!"
+           exit 1
+         }
+         echo "-- Applying SUSFS kernel patch..."
+         set +e
+         patch -p1 --fuzz=5 --forward < /tmp/susfs_patch_to_4.19.patch
+         PATCH_RC=$?
+         set -e
+         echo "-- SUSFS kernel patch integrated (see warnings above, if any)."
+
+          echo "-- Applying SuSFS inline hook patches..."
+          curl -LSs --fail --retry 3 "https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh" | bash || {
+          echo "Inline hook patch failed!"
+          exit 1
+          } 
+
+      - name: Verify Manual Hook Wiring
+        run: |
+          set -euo pipefail
+          # Fails fast in CI instead of discovering a bootloop or a silent no-root
+          # build after a 90-minute run. Each of these five files must reference
+          # the ksu_handle_* hook calls once the setup.sh + inline-hook patches
+          # have run; if any is missing, the corresponding syscall path is
+          # unpatched and su will not work for it.
+          declare -A HOOK_FILES=(
+            ["fs/exec.c"]="ksu_handle_execveat"
+            ["fs/open.c"]="ksu_handle_faccessat"
+            ["fs/read_write.c"]="ksu_handle_sys_read|ksu_vfs_read_hook"
+            ["fs/stat.c"]="ksu_handle_stat"
+            ["kernel/reboot.c"]="ksu_handle_sys_reboot"
+          )
+
+          MISSING=0
+          for f in "${!HOOK_FILES[@]}"; do
+            pattern="${HOOK_FILES[$f]}"
+            if [ ! -f "$f" ]; then
+              echo "WARN: $f not found at expected path, skipping check."
+              continue
+            fi
+            if grep -Eq "$pattern" "$f"; then
+              echo "OK:   $f contains expected hook call ($pattern)"
+            else
+              echo "MISSING: $f does NOT contain expected hook call ($pattern)"
+              MISSING=1
+            fi
+          done
+
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "One or more manual hooks were not wired in. KernelSU-Next will build" >&2
+            echo "but su/root will not function on the affected syscall paths. See the" >&2
+            echo "'Integrate SUSFS Kernel Patch' step output and *.rej artifacts." >&2
+            exit 1
+          fi
+
+      - name: Config Preparation
+        run: |
+          set -euo pipefail
+          # NOTE: these defaults must match the ones in build-okernel.sh.
+          export PATH="$HOME/neutron-clang/bin:/usr/lib/ccache:$PATH"
+          export CCACHE_DIR="$HOME/.cache/ccache_mikernel"
+          export CC="clang"
+          export CXX="clang++"
+          export CCACHE_COMPILERCHECK=content
+          export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
+          export KBUILD_BUILD_USER="O-Kernel"
+          export KBUILD_BUILD_HOST="umi-kernel"
+          export KBUILD_BUILD_TIMESTAMP="$(date)"
+          export ARCH=arm64
+
+          MAKE_ARGS="ARCH=arm64 \
+            SUBARCH=arm64 \
+            O=out \
+            CC=clang \
+            HOSTCC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip"
+
+          echo "CCACHE_DIR: [$CCACHE_DIR]"
+          echo "DEFCONFIG: [$DEFCONFIG]"
+
+          echo "......Generating base defconfig......."
+          make $MAKE_ARGS "$DEFCONFIG"
+
+          echo "......Appending Miui specific Configs........."
+          ./scripts/config --file out/.config \
+            -e PERF_CRITICAL_RT_TASK \
+            -e SF_BINDER \
+            -e OVERLAY_FS \
+            -e MIGT \
+            -e MIGT_ENERGY_MODEL \
+            -e MIHW \
+            -e PACKAGE_RUNTIME_INFO \
+            -e BINDER_OPT \
+            -e KPERFEVENTS \
+            -e MILLET \
+            -e PERF_HUMANTASK \
+            -e XIAOMI_MIUI \
+            -e TASK_DELAY_ACCT \
+            -e MIUI_ZRAM_MEMORY_TRACKING \
+            -e BOOTUP_RECLAIM \
+            -e MI_RECLAIM \
+            -e RTMM \
+            -d REKERNEL \
+            -d REKERNEL_NETWORK
+
+          echo "..............Applying Droidspaces required kernel configs......."
+          ./scripts/config --file out/.config \
+            --enable CONFIG_NAMESPACES \
+            --enable CONFIG_PID_NS \
+            --enable CONFIG_UTS_NS \
+            --enable CONFIG_SYSVIPC \
+            --enable CONFIG_IPC_NS \
+            --enable CONFIG_DEVTMPFS
+
+          echo "......Appending ksu specific Configs........."
+          ./scripts/config --file out/.config \
+            --enable CONFIG_KSU \
+            --enable CONFIG_KSU_MANUAL_HOOK \
+            --disable CONFIG_KPROBES \
+            --disable CONFIG_KPROBE_EVENTS \
+            --disable CONFIG_KSU_KPROBE_HOOKS \
+            --enable CONFIG_KSU_SUSFS \
+            --enable CONFIG_KSU_SUSFS_SUS_PATH \
+            --enable CONFIG_KSU_SUSFS_SUS_MOUNT \
+            --enable CONFIG_KSU_SUSFS_SUS_KSTAT \
+            --enable CONFIG_KSU_SUSFS_TRY_UMOUNT \
+            --enable CONFIG_KSU_SUSFS_SPOOF_UNAME \
+            --enable CONFIG_KSU_SUSFS_ENABLE_LOG \
+            --enable CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+            --enable CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            --enable CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+            --disable CONFIG_KSU_SUSFS_SUS_SU
+
+          echo "Resolving config dependencies......."
+          make $MAKE_ARGS olddefconfig
+
+      - name: Applying Droidspaces Patches
+        run: |
+          set -euo pipefail
+          echo "Applying Droidspaces non-GKI kernel patches......."
+          for patch_file in /tmp/droidspaces-patches/*.patch; do
+            echo "  -> Applying: $(basename "$patch_file")"
+            if ! patch -p1 -N --forward < "$patch_file"; then
+              echo "     Note: patch may already be applied or failed to apply cleanly - check manually if the build breaks."
+            fi
+          done
+
+      - name: Build Kernel
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/neutron-clang/bin:/usr/lib/ccache:$PATH"
+          chmod +x build-okernel.sh
+          echo "Using build-okernel.sh....."
+          bash build-okernel.sh
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: OKernel_v1_HOS_Mi10
+          path: ./*.zip
+          if-no-files-found: error
+
+      - name: Upload Patch Rejects (debug)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: susfs-patch-rejects
+          path: "**/*.rej"
+          if-no-files-found: ignore
