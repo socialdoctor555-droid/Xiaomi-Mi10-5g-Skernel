@@ -183,18 +183,18 @@ jobs:
 
           echo "......Appending ksu specific Configs........."
           ./scripts/config --file out/.config \
-            CONFIG_KSU=y \
-            CONFIG_KSU_MANUAL_HOOK=y \
-            CONFIG_KSU_SUSFS=y \
-            CONFIG_KSU_SUSFS_SUS_PATH=y \
-            CONFIG_KSU_SUSFS_SUS_MOUNT=y \
-            CONFIG_KSU_SUSFS_SUS_KSTAT=y \
-            CONFIG_KSU_SUSFS_TRY_UMOUNT=y \
-            CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
-            CONFIG_KSU_SUSFS_ENABLE_LOG=y \
-            CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y \
-            CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y \
-            CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
+            --enable CONFIG_KSU \
+            --enable CONFIG_KSU_MANUAL_HOOK \
+            --enable CONFIG_KSU_SUSFS \
+            --enable CONFIG_KSU_SUSFS_SUS_PATH \
+            --enable CONFIG_KSU_SUSFS_SUS_MOUNT \
+            --enable CONFIG_KSU_SUSFS_SUS_KSTAT \
+            --enable CONFIG_KSU_SUSFS_TRY_UMOUNT \
+            --enable CONFIG_KSU_SUSFS_SPOOF_UNAME \
+            --enable CONFIG_KSU_SUSFS_ENABLE_LOG \
+            --enable CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+            --enable CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            --enable CONFIG_KSU_SUSFS_OPEN_REDIRECT \
             # CONFIG_KSU_SUSFS_SUS_SU is not set
 
           echo "Resolving config dependencies......."
