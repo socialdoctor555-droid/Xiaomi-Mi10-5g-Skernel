@@ -5,9 +5,6 @@
 
 set -euo pipefail
 
-export KBUILD_BUILD_USER="O-Kernel"
-export KBUILD_BUILD_HOST="umi-kernel"
-export KBUILD_BUILD_TIMESTAMP="$(date)"
 export ARCH=arm64
 export CC=/path/to/clang18/bin/clang
 
