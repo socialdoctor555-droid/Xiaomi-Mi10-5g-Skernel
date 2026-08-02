@@ -1,4 +1,4 @@
-name: O-Kernel(beta-v1)
+name: O-Kernel_v1.5
 on:
   workflow_dispatch:
 jobs:
@@ -155,26 +155,6 @@ jobs:
 
          echo "......Generating base defconfig......."
          make $MAKE_ARGS "$DEFCONFIG"
-
-         echo "......Appending Miui specific Configs........."
-         ./scripts/config --file out/.config \
-            -e PERF_CRITICAL_RT_TASK \
-            -e SF_BINDER \
-            -e OVERLAY_FS \
-            -e MIGT \
-            -e MIGT_ENERGY_MODEL \
-            -e MIHW \
-            -e PACKAGE_RUNTIME_INFO \
-            -e BINDER_OPT \
-            -e KPERFEVENTS \
-            -e MILLET \
-            -e PERF_HUMANTASK \
-            -e XIAOMI_MIUI \
-            -e TASK_DELAY_ACCT \
-            -e MIUI_ZRAM_MEMORY_TRACKING \
-            -e BOOTUP_RECLAIM \
-            -e MI_RECLAIM \
-            -e RTMM
           
          echo "..............Applying Droidspaces required kernel configs......."
          ./scripts/config --file out/.config \
@@ -218,7 +198,7 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: OKernel_v1_HOS_Mi10
+        name: OKernel_v5_HOS_Mi10
         path: ./*.zip
         if-no-files-found: error
 
