@@ -75,6 +75,21 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "========== Integrating ReSukiSU =========="
+          KSU_SETUP_URI="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh"
+          KSU_SETUP_BRANCH="main"
+          echo "-- Running ReSukiSU setup..."
+          curl -LSs --fail --retry 3 "$KSU_SETUP_URI" | bash -s "$KSU_SETUP_BRANCH" || {
+          echo "ReSukiSU setup failed!"
+          exit 1
+          }
+
+          echo "-- Applying SuSFS inline hook patches..."
+          curl -LSs --fail --retry 3 "https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/raw/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh" | bash || {
+          echo "Inline hook patch failed!"
+          exit 1
+          }
+
           echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
           git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b Skernel --single-branch --depth=1 anykernel
           echo ".......Anykernel sources cloned....."
@@ -83,6 +98,11 @@ jobs:
           mkdir -p /tmp/droidspaces-patches
           curl -fsSL -o /tmp/droidspaces-patches/02.fix_restore_cgroup_file_prefix_handling.patch \
             "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch"
+
+      - name: SUSFS Integration
+        run: |
+          echo "-- Locating KernelSU driver directory --"
+          KSU_DIR="KernelSU"  
 
       - name: Config Preparation
         run: |
@@ -151,6 +171,23 @@ jobs:
             --enable CONFIG_SYSVIPC \
             --enable CONFIG_IPC_NS \
             --enable CONFIG_DEVTMPFS
+
+          echo "................Resukisu configuration................."
+          ./scripts/config --file out/.config \
+           --enable CONFIG_KSU_SUSFS \
+           --enable CONFIG_KSU_SUSFS_SUS_PATH \
+           --enable CONFIG_KSU_SUSFS_SUS_MOUNT \
+           --enable CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
+           --enable CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
+           --enable CONFIG_KSU_SUSFS_SUS_KSTAT \
+           --enable CONFIG_KSU_SUSFS_TRY_UMOUNT \
+           --enable CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
+           --enable CONFIG_KSU_SUSFS_SPOOF_UNAME \
+           --enable CONFIG_KSU_SUSFS_ENABLE_LOG \
+           --enable CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+           --enable CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+           --enable CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+           --disable CONFIG_KSU_SUSFS_SUS_SU 
 
           echo "Resolving config dependencies......."
           make $MAKE_ARGS olddefconfig
