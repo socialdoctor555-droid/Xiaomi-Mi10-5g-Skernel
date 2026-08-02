@@ -141,28 +141,6 @@ jobs:
           echo "......Generating base defconfig......."
           make $MAKE_ARGS "$DEFCONFIG"
 
-          echo "......Appending Miui specific Configs........."
-          ./scripts/config --file out/.config \
-            -e PERF_CRITICAL_RT_TASK \
-            -e SF_BINDER \
-            -e OVERLAY_FS \
-            -e MIGT \
-            -e MIGT_ENERGY_MODEL \
-            -e MIHW \
-            -e PACKAGE_RUNTIME_INFO \
-            -e BINDER_OPT \
-            -e KPERFEVENTS \
-            -e MILLET \
-            -e PERF_HUMANTASK \
-            -e XIAOMI_MIUI \
-            -e TASK_DELAY_ACCT \
-            -e MIUI_ZRAM_MEMORY_TRACKING \
-            -e BOOTUP_RECLAIM \
-            -e MI_RECLAIM \
-            -e RTMM \
-            -d REKERNEL \
-            -d REKERNEL_NETWORK
-
           echo "..............Applying Droidspaces required kernel configs......."
           ./scripts/config --file out/.config \
             --enable CONFIG_NAMESPACES \
